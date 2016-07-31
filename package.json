@@ -19,14 +19,14 @@
     ]
   },
   "dependencies": {
-    "glsl-quad": "1.0.0"
+    "glsl-quad": "1.0.0",
+    "regl": "^0.10.0"
   },
   "devDependencies": {
     "disc": "^1.3.2",
     "glsl-numerify": "1.0.0",
     "indexhtmlify": "^1.3.0",
     "jquery-browserify": "^1.8.1",
-    "regl": "^0.10.0",
     "resl": "^1.0.1",
     "semistandard": "~8.0.0",
     "snazzy": "^4.0.0"
@@ -47,5 +47,11 @@
     "filter",
     "blur",
     "summed area table"
-  ]
+  ],
+  "scripts": {
+    "mytest": "semistandard | snazzy",
+    "build": "npm run build-script && npm run build-demo",
+    "build-script": "mkdir -p ./dist && browserify glsl-sat.js --standalone glsl-sat > ./dist/glsl-sat.js",
+    "build-demo": "mkdir -p ./www/glsl-sat-demo/ && browserify ./glsl-sat-demo.js | indexhtmlify > ./www/glsl-sat-demo/index.html"
+  }
 }

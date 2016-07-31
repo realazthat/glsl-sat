@@ -45,7 +45,7 @@ To run the demo, run:
 branch | demo
 -------|-------
 master | [glsl-sat-demo](https://realazthat.github.io/glsl-sat/master/www/glsl-sat-demo/index.html)
-develop | [glsl-sat-demo](https://realazthat.github.io/glsl-sat/master/www/glsl-sat-demo/index.html)
+develop | [glsl-sat-demo](https://realazthat.github.io/glsl-sat/develop/www/glsl-sat-demo/index.html)
 
 
  Source Upscaled | Source Red Numerified | SAT Result Upscaled | SAT Result Red Numerified

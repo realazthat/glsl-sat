@@ -11,7 +11,10 @@
 const $ = require('jquery-browserify');
 const resl = require('resl');
 const regl = require('regl')({
-  extensions: ['OES_texture_float']
+  extensions: ['OES_texture_float'],
+  // TODO: FIXME: dunno why we need this here, we do not read non-uint8 data from screen,
+  // but it fails without this on gh-pages for some reason.
+  attributes: {preserveDrawingBuffer: true}
 });
 
 const computeSat = require('./glsl-sat.js').computeSat;

@@ -2,7 +2,7 @@
 const $ = require('jquery-browserify');
 const resl = require('resl');
 const regl = require('regl')({
-  extensions: ['OES_texture_float'/*, 'OES_texture_float_linear'*/]
+  extensions: ['OES_texture_float']
 });
 
 const computeSat = require('./glsl-sat.js').computeSat;
@@ -10,7 +10,9 @@ const computeSat = require('./glsl-sat.js').computeSat;
 const numerify = require('glsl-numerify');
 const quad = require('glsl-quad');
 
-const drawToScreen = regl({
+// command to copy a texture to an FBO, assumes the texture is in opengl-order
+// where the origin is the lower left of the texture.
+const drawTextureToFbo = regl({
   frag: quad.shader.frag,
   vert: quad.shader.vert,
   attributes: {
@@ -21,10 +23,12 @@ const drawToScreen = regl({
   uniforms: {
     u_tex: regl.prop('texture'),
     u_clip_y: 1
-  }
+  },
+  framebuffer: regl.prop('fbo')
 });
 
-
+// command to copy a texture to an FBO, but flipping the Y axis so that the uvs begin
+// at the upper right corner, so that it can be drawn to canvas etc.
 const drawToCanvasFBO = regl({
   frag: quad.shader.frag,
   vert: quad.shader.vert,
@@ -41,33 +45,30 @@ const drawToCanvasFBO = regl({
 });
 
 function dataURIFromFBO ({fbo, width, height, regl}) {
-  console.log('width:',width);
-  console.log('height:',height);
-
-  let canvas_fbo = regl.framebuffer({
-              color: regl.texture({
-                width: width,
-                height: height,
-                stencil: false,
-                format: 'rgba',
-                type: 'uint8',
-                depth: false,
-                wrap: 'clamp',
-                mag: 'nearest',
-                min: 'nearest'
-              })
-            });
+  let canvasFBO = regl.framebuffer({
+    color: regl.texture({
+      width: width,
+      height: height,
+      stencil: false,
+      format: 'rgba',
+      type: 'uint8',
+      depth: false,
+      wrap: 'clamp',
+      mag: 'nearest',
+      min: 'nearest'
+    })
+  });
 
   let data = [];
   try {
-    drawToCanvasFBO({texture: fbo.color[0], fbo: canvas_fbo});
+    drawToCanvasFBO({texture: fbo.color[0], fbo: canvasFBO});
 
-    let bindFbo = regl({framebuffer: canvas_fbo});
+    let bindFbo = regl({framebuffer: canvasFBO});
     bindFbo(function () {
       data = regl.read();
     });
   } finally {
-    canvas_fbo.destroy();
+    canvasFBO.destroy();
   }
 
   var canvas = document.createElement('canvas');
@@ -75,16 +76,13 @@ function dataURIFromFBO ({fbo, width, height, regl}) {
   canvas.height = height;
   var context = canvas.getContext('2d');
 
-
   // Copy the pixels to a 2D canvas
   var imageData = context.createImageData(width, height);
   imageData.data.set(data);
   context.putImageData(imageData, 0, 0);
 
-
   return canvas.toDataURL();
 }
-
 
 const sat8x8pnguri = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYA
 AADED76LAAAABGdBTUEAALGPC/xhBQAACjFpQ0NQSUNDIHByb2ZpbGUAAEiJnZZ3VFPZFofPvTe9UJIQ
@@ -161,9 +159,7 @@ resl({
     }
   },
   onDone: ({texture, digitsTexture}) => {
-    console.log('digitsTexture:',digitsTexture)
-
-    // make some fbos for ping-ponging intermediate computations, and the output buffer
+    // make a bunch of fbos for ping-ponging intermediate computations, and the output buffer etc.
     let fbos = [null, null, null, null].map(function () {
       return regl.framebuffer({
         color: regl.texture({
@@ -186,41 +182,26 @@ resl({
       });
     });
 
+    // use one FBO for the output.
     let outFbo = fbos.pop();
+
+    // and another for the input, for later use.
     let inFbo = fbos.pop();
-
-
-    const drawTextureToFbo = regl({
-      frag: quad.shader.frag,
-      vert: quad.shader.vert,
-      attributes: {
-        a_position: quad.verts,
-        a_uv: quad.uvs
-      },
-      elements: quad.indices,
-      uniforms: {
-        digits_texture: digitsTexture,
-        u_tex: regl.prop('texture'),
-        u_clip_y: 1
-      },
-      framebuffer: regl.prop('fbo')
-    });
-
-    drawTextureToFbo({texture, fbo: inFbo})
 
     computeSat({texture: texture, fbos: fbos, outFbo: outFbo, regl, components: 'rgb', type: 'vec3'});
 
-    let upscaled_cell_width = 32;
-    let upscaled_cell_height = 32;
-    let upscaled_width = texture.width * Math.max(upscaled_cell_width,upscaled_cell_height);
-    let upscaled_height = texture.height * Math.max(upscaled_cell_width,upscaled_cell_height);
+    let upscaledCellWidth = 32;
+    let upscaledCellHeight = 32;
+    let upscaledWidth = texture.width * Math.max(upscaledCellWidth, upscaledCellHeight);
+    let upscaledHeight = texture.height * Math.max(upscaledCellWidth, upscaledCellHeight);
 
+    // a command to take an input texture and "numerify" it and place it in a destination FBO.
     const drawNumbersToFbo = regl({
-      frag: numerify.makeFrag({ multiplier: 256.0
-                              , sourceSize: `vec2(${texture.width}, ${texture.height})`
-                              , destinationCellSize: `vec2(${upscaled_cell_width}, ${upscaled_cell_height})`
-                              , destinationSize: `vec2(${upscaled_width - upscaled_cell_width}, ${upscaled_height - upscaled_cell_height})`
-                              , component: 'r'}),
+      frag: numerify.makeFrag({ multiplier: 256.0,
+                                sourceSize: `vec2(${texture.width}, ${texture.height})`,
+                                destinationCellSize: `vec2(${upscaledCellWidth - 1}, ${upscaledCellHeight - 1})`,
+                                destinationSize: `vec2(${upscaledWidth}, ${upscaledHeight})`,
+                                component: 'r'}),
       vert: numerify.makeVert(),
       attributes: {
         a_position: quad.verts,
@@ -235,50 +216,68 @@ resl({
       framebuffer: regl.prop('fbo')
     });
 
-
-
-    let numbersFBOs = [null,null].map(function(){
+    // allocate two FBOS to store the numerified textures.
+    let numbersFBOs = [null, null].map(function () {
       return regl.framebuffer({
-              color: regl.texture({
-                width: upscaled_width,
-                height: upscaled_height,
-                stencil: false,
-                format: 'rgba',
-                type: 'uint8',
-                depth: false,
-                wrap: 'clamp',
-                mag: 'nearest',
-                min: 'nearest'
-              })
-            });
+        color: regl.texture({
+          width: upscaledWidth,
+          height: upscaledHeight,
+          stencil: false,
+          format: 'rgba',
+          type: 'uint8',
+          depth: false,
+          wrap: 'clamp',
+          mag: 'nearest',
+          min: 'nearest'
+        })
+      });
     });
 
-    // drawNumbersToFbo({texture: texture, fbo: numbersFBO});
-    // drawNumbersToFbo({texture: inFbo.color[0], fbo: numbersFBO});
-    drawNumbersToFbo({texture: inFbo.color[0], fbo: numbersFBOs[0]});
-    drawNumbersToFbo({texture: outFbo.color[0], fbo: numbersFBOs[1]});
+    // one FBO to store the input texture as a numerified texture.
+    let inNumbersFBO = numbersFBOs[0];
+    // and a second FBO to store the SAT result texture as a numerified texture.
+    let outNumbersFBO = numbersFBOs[1];
 
-    let $srcDiv = $('<div class="source-images"></div>').css('text-align','center').appendTo('body');
-    $('<h3>').appendTo($srcDiv).css('text-align','center').text('Source image (upscaled)');
+    // copy the input texture to the `inFbo`.
+    drawTextureToFbo({texture, fbo: inFbo});
+    // "numerify" the input texture.
+    drawNumbersToFbo({texture: inFbo.color[0], fbo: inNumbersFBO});
+    // "numerify" the SAT result texture.
+    drawNumbersToFbo({texture: outFbo.color[0], fbo: outNumbersFBO});
 
-    let $resultDiv = $('<div class="result-images"></div>').css('text-align','center').appendTo('body');
-    $('<h3>').appendTo($resultDiv).css('text-align','center').text('Result images (upscaled)');
+    // draw the stuff to img tags, and put everything into the DOM for display.
 
-    let $srcImg = $('<img>')
-                    .appendTo($srcDiv)
-                    .attr('src', dataURIFromFBO({fbo: inFbo, width: upscaled_width, height: upscaled_height, regl}));
+    let $srcDiv = $('<div class="source-images"></div>').css('text-align', 'center').appendTo('body');
+    $('<h3>').appendTo($srcDiv).css('text-align', 'center').text('Source image (upscaled)');
 
-    let $srcNumbersImg = $('<img>')
-                          .appendTo($srcDiv)
-                          .attr('src', dataURIFromFBO({fbo: numbersFBOs[0], width: upscaled_width, height: upscaled_height, regl}));
-    let $satImg = $('<img>')
-                    .appendTo($resultDiv)
-                    .attr('src', dataURIFromFBO({fbo: outFbo, width: upscaled_width, height: upscaled_height, regl}));
-    let $satNumbersImg = $('<img>')
-                          .appendTo($resultDiv)
-                          .attr('src', dataURIFromFBO({fbo: numbersFBOs[1], width: upscaled_width, height: upscaled_height, regl}));
+    let $resultDiv = $('<div class="result-images"></div>').css('text-align', 'center').appendTo('body');
+    $('<h3>').appendTo($resultDiv).css('text-align', 'center').text('Result image (upscaled)');
 
-    // drawToScreen({texture: numbersFBOs[1]});
+    function figureTemplate ({src, captionHtml = '', alt = ''}) {
+      return `
+      <figure>
+        <img src="${src}" alt="${alt}">
+        <figcaption>${captionHtml}</figcaption>
+      </figure>
+      `;
+    }
 
+    let $srcImg = $.parseHTML(figureTemplate({src: dataURIFromFBO({fbo: inFbo, width: upscaledWidth, height: upscaledHeight, regl}),
+                                               alt: 'Source image (Rescaled)',
+                                               captionHtml: '<strong>Source image (Rescaled)</strong>'}));
+    let $srcNumbersImg = $.parseHTML(figureTemplate({src: dataURIFromFBO({fbo: inNumbersFBO, width: upscaledWidth, height: upscaledHeight, regl}),
+                                                      alt: 'Source image numerified red',
+                                                      captionHtml: '<strong>Source image, numerified red</strong>'}));
+    let $satImg = $.parseHTML(figureTemplate({src: dataURIFromFBO({fbo: outFbo, width: upscaledWidth, height: upscaledHeight, regl}),
+                                               alt: 'Result SAT image (Rescaled)',
+                                               captionHtml: '<strong>Result SAT image (Rescaled)</strong>'}));
+    let $satNumbersImg = $.parseHTML(figureTemplate({src: dataURIFromFBO({fbo: outNumbersFBO, width: upscaledWidth, height: upscaledHeight, regl}),
+                                                      alt: 'Result SAT image numerified red',
+                                                      captionHtml: '<strong>Result SAT image, numerified red</strong>'}));
+
+    $($srcImg).css('display', 'inline-block').appendTo($srcDiv);
+    $($srcNumbersImg).css('display', 'inline-block').appendTo($srcDiv);
+    $($satImg).css('display', 'inline-block').appendTo($resultDiv);
+    $($satNumbersImg).css('display', 'inline-block').appendTo($resultDiv);
   }
 });

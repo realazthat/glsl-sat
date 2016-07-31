@@ -1,5 +1,4 @@
 
-
 const quad = require('glsl-quad');
 
 const makeVert = function makeVert ({passIndex, textureSize, direction}) {
@@ -86,29 +85,23 @@ const makeFrag = function makeFrag ({type = 'vec4', components = 'rgba'}) {
   `;
 };
 
-
-
 function logtobase ({value, base}) {
   return Math.log(value) / Math.log(base);
 }
 
-function computeNumPasses({textureSize,sampleSize}){
+function computeNumPasses ({textureSize, sampleSize}) {
   return Math.ceil(logtobase({value: textureSize, base: sampleSize}));
 }
-function computeNumBitsRequired({width,height,channel_bit_depth}){
-  return Math.ceil(Math.log2(width)) + Math.ceil(Math.log2(height)) + channel_bit_depth;
+function computeNumBitsRequired ({width, height, channelBitDepth}) {
+  return Math.ceil(Math.log2(width)) + Math.ceil(Math.log2(height)) + channelBitDepth;
 }
 
-
-function runPasses ({regl, inputTexture, textureSize, direction, passes, currentFboIndex, fbos, type = 'vec4', components = 'rgba', clip_y = 1, outFbo = null}) {
+function runPasses ({regl, inputTexture, textureSize, direction, passes, currentFboIndex, fbos, type = 'vec4', components = 'rgba', clipY = 1, outFbo = null}) {
   for (let passIndex = 0; passIndex < passes; ++passIndex) {
     let passInTtexture = passIndex === 0 ? inputTexture : fbos[currentFboIndex].color[0];
 
     let vert = makeVert({ passIndex, textureSize: textureSize, direction: direction });
     let frag = makeFrag({type, components});
-
-    console.log('vert:',vert);
-    console.log('frag:',vert);
 
     const draw = regl({
       vert: vert,
@@ -119,7 +112,7 @@ function runPasses ({regl, inputTexture, textureSize, direction, passes, current
       },
       elements: quad.indices,
       uniforms: {
-        u_clip_y: clip_y,
+        u_clip_y: clipY,
         u_tex: regl.prop('texture')
       },
       framebuffer: regl.prop('fbo')
@@ -140,7 +133,7 @@ function runPasses ({regl, inputTexture, textureSize, direction, passes, current
   return {currentFboIndex};
 }
 
-function computeSat ({texture, fbos, regl, outFbo = null, type = 'vec4', components = 'rgba', clip_y = 1, currentFboIndex = 0}) {
+function computeSat ({regl, texture, fbos, currentFboIndex = 0, outFbo = null, components = 'rgba', type = 'vec4', clipY = 1}) {
   // http://developer.amd.com/wordpress/media/2012/10/GDC2005_SATEnvironmentReflections.pdf
 
   if (fbos.length < 2) {
@@ -150,35 +143,30 @@ function computeSat ({texture, fbos, regl, outFbo = null, type = 'vec4', compone
   let sampleSize = 16;
   let textureSize = Math.max(texture.width, texture.height);
 
-
-  // console.log(`logtobase(${textureSize}, ${sampleSize}):`, logtobase({value: textureSize, base: sampleSize}));
   let passes = computeNumPasses({textureSize, sampleSize});
-  console.log('passes:',passes);
 
-
-  ({currentFboIndex} = runPasses({  inputTexture: texture
-                                  , textureSize
-                                  , direction: 'V'
-                                  , passes
-                                  , currentFboIndex
-                                  , fbos
-                                  , type
-                                  , components
-                                  , clip_y
-                                  , regl
-                                  , outFbo: null}));
-  // console.log('currentFboIndex:',currentFboIndex)
-  ({currentFboIndex} = runPasses({  inputTexture: fbos[currentFboIndex].color[0]
-                                  , textureSize
-                                  , direction: 'H'
-                                  , passes
-                                  , currentFboIndex
-                                  , fbos
-                                  , type
-                                  , components
-                                  , clip_y
-                                  , regl
-                                  , outFbo: outFbo}));
+  ({currentFboIndex} = runPasses({inputTexture: texture,
+                                  textureSize,
+                                  direction: 'V',
+                                  passes,
+                                  currentFboIndex,
+                                  fbos,
+                                  type,
+                                  components,
+                                  clipY,
+                                  regl,
+                                  outFbo: null}));
+  ({currentFboIndex} = runPasses({inputTexture: fbos[currentFboIndex].color[0],
+                                  textureSize,
+                                  direction: 'H',
+                                  passes,
+                                  currentFboIndex,
+                                  fbos,
+                                  type,
+                                  components,
+                                  clipY,
+                                  regl,
+                                  outFbo: outFbo}));
 
   return {currentFboIndex};
 }

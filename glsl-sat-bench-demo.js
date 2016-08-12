@@ -11,26 +11,49 @@ const regl = require('regl')({
 
 $(document).ready(function () {
   let $results = $('<table style="width: 100%">').appendTo($('body'));
-  $results.append($('<thead><tr><th>Experiment</th><th>Size</th><th>N</th><th>Total Time</th><th>Total regl CPU Time</th><th>Total regl GPU Time</th><th>Time Per</th></tr></thead>'));
+  $results.append($(`
+    <thead>
+      <tr>
+        <th>Experiment</th>
+        <th>Size</th>
+        <th>N</th>
+        <th>Total Time</th>
+        <th>Total regl CPU Time</th>
+        <th>Total regl GPU Time</th>
+        <th>Time Per</th>
+        <th>CPU Time Per</th>
+        <th>GPU Time Per</th>
+      </tr>
+    </thead>
+  `));
   let $tbody = $('<tbody>').appendTo($results);
 
   setTimeout(function () {
     let experimentIndex = 1;
     let size = 256;
-    let N = 64;
-    let results = satbench.sat.compute({regl, size, N});
-    console.log(results);
+    let N = 256;
+    
+    satbench.sat.compute({regl, size, N})
+      .then(function(results){
+        console.log(results);
 
-    let timePer = μs.parse(results.microseconds.total / N).toString();
+        let timePer = μs.parse(results.microseconds.total / N).toString();
+        let cpuTimePer = μs.parse(results.cpuTime / N).toString();
+        let gpuTimePer = μs.parse(results.gpuTime / N).toString();
 
-    let $tr = $('<tr>')
-                .append($('<td>').text(`${experimentIndex}`).css('padding', '2em'))
-                .append($('<td>').text(`${size}`).css('padding', '2em'))
-                .append($('<td>').text(`${N}`).css('padding', '2em'))
-                .append($('<td>').text(μs.parse(results.microseconds.total).toString()).css('padding', '2em'))
-                .append($('<td>').text(μs.parse(1000 * results.cpuTime).toString()).css('padding', '2em'))
-                .append($('<td>').text(μs.parse(1000 * results.gpuTime).toString()).css('padding', '2em'))
-                .append($('<td>').text(timePer).css('padding', '2em'));
-    $tr.appendTo($tbody);
+
+        let $tr = $('<tr>')
+                    .append($('<td>').text(`${experimentIndex}`).css('padding', '2em'))
+                    .append($('<td>').text(`${size}`).css('padding', '2em'))
+                    .append($('<td>').text(`${N}`).css('padding', '2em'))
+                    .append($('<td>').text(μs.parse(results.microseconds.total).toString()).css('padding', '2em'))
+                    .append($('<td>').text(μs.parse(1000 * results.cpuTime).toString()).css('padding', '2em'))
+                    .append($('<td>').text(μs.parse(1000 * results.gpuTime).toString()).css('padding', '2em'))
+                    .append($('<td>').text(timePer).css('padding', '2em'))
+                    .append($('<td>').text(cpuTimePer).css('padding', '2em'))
+                    .append($('<td>').text(gpuTimePer).css('padding', '2em'));
+        $tr.appendTo($tbody);
+      })
+    
   });
 });

@@ -4,8 +4,7 @@ const μs = require('microseconds');
 const range = require('array-range');
 
 function benchSatCompute ({regl, size, textureData = null, N, components = 'rgba', type = 'vec4'}) {
-  return new Promise(function(resolve,reject){
-
+  return new Promise(function (resolve, reject) {
     let fbos = range(2).map(function () {
       return regl.framebuffer({
         color: regl.texture({
@@ -80,27 +79,25 @@ function benchSatCompute ({regl, size, textureData = null, N, components = 'rgba
 
     let t0 = μs.now();
 
-
-    function setTimeoutPromise(f,t){
-      return new Promise(function(resolve,reject){
-
-        setTimeout(function(){
+    function setTimeoutPromise (f, t) {
+      return new Promise(function (resolve, reject) {
+        setTimeout(function () {
           Promise.resolve()
             .then(f)
-            .then(function(result){
+            .then(function (result) {
               return resolve(result);
             })
-            .catch(function(err){
+            .catch(function (err) {
               return reject(err);
             });
         }, t);
       });
     }
 
-    setTimeoutPromise(function(){
+    setTimeoutPromise(function () {
       regl.poll();
     })
-    .then(function(){
+    .then(function () {
       t0 = μs.now();
       for (let i = 0; i < N; ++i) {
         let samplet0 = μs.now();
@@ -112,12 +109,12 @@ function benchSatCompute ({regl, size, textureData = null, N, components = 'rgba
         results.microseconds.samples.push(μs.since(samplet0));
       }
     })
-    .then(function(){
-      return setTimeoutPromise(function(){
+    .then(function () {
+      return setTimeoutPromise(function () {
         regl.poll();
       });
     })
-    .then(function(){
+    .then(function () {
       results.cpuTime = scope.stats.cpuTime;
       results.gpuTime = scope.stats.gpuTime;
 
@@ -125,7 +122,7 @@ function benchSatCompute ({regl, size, textureData = null, N, components = 'rgba
 
       return resolve(results);
     })
-    .catch(function(err){
+    .catch(function (err) {
       return reject(err);
     });
   }); // new Promise()

@@ -10,6 +10,7 @@ const regl = require('regl')({
 });
 
 $(document).ready(function () {
+  $('canvas').css('z-index', '-5');
   let $results = $('<table style="width: 100%">').appendTo($('body'));
   $results.append($(`
     <thead>
@@ -32,15 +33,14 @@ $(document).ready(function () {
     let experimentIndex = 1;
     let size = 256;
     let N = 256;
-    
+
     satbench.sat.compute({regl, size, N})
-      .then(function(results){
+      .then(function (results) {
         console.log(results);
 
         let timePer = μs.parse(results.microseconds.total / N).toString();
-        let cpuTimePer = μs.parse(results.cpuTime / N).toString();
-        let gpuTimePer = μs.parse(results.gpuTime / N).toString();
-
+        let cpuTimePer = μs.parse(results.cpuTime * 1000 / N).toString();
+        let gpuTimePer = μs.parse(results.gpuTime * 1000 / N).toString();
 
         let $tr = $('<tr>')
                     .append($('<td>').text(`${experimentIndex}`).css('padding', '2em'))
@@ -53,7 +53,6 @@ $(document).ready(function () {
                     .append($('<td>').text(cpuTimePer).css('padding', '2em'))
                     .append($('<td>').text(gpuTimePer).css('padding', '2em'));
         $tr.appendTo($tbody);
-      })
-    
+      });
   });
 });
